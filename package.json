@@ -1,0 +1,61 @@
+{
+  "name": "tistory-blog-skill",
+  "version": "0.1.6",
+  "description": "티스토리 관리자 세션 기반 블로그 운영 CLI 스킬",
+  "type": "module",
+  "main": "./scripts/tistory-blog.mjs",
+  "bin": {
+    "tistory-blog": "./scripts/tistory-blog.mjs",
+    "tistory-blog-connect": "./scripts/connect.mjs"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "templates",
+    "README.md",
+    "SKILL.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "check-ready": "node scripts/check-ready.mjs",
+    "setup": "node scripts/check-ready.mjs --fix",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsc",
+    "postinstall": "node postinstall.js",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "tistory",
+    "openclaw",
+    "codex",
+    "claude-code",
+    "blog",
+    "automation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rafe-Giho/tistory-blog-skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rafe-Giho/tistory-blog-skill/issues"
+  },
+  "homepage": "https://github.com/Rafe-Giho/tistory-blog-skill#readme",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "cheerio": "^1.2.0",
+    "keytar": "^7.9.0",
+    "playwright": "^1.60.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,13 @@
+# Package safety net. package.json files whitelist is primary.
+src/
+tsconfig.json
+*.tsbuildinfo
+.git/
+.github/
+node_modules/
+.env
+.env.*
+.DS_Store
+Thumbs.db
+*.log
+.skin-backup/
