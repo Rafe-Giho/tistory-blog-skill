@@ -1,6 +1,6 @@
 {
   "name": "tistory-blog-skill",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "티스토리 관리자 세션 기반 블로그 운영 CLI 스킬",
   "type": "module",
   "main": "./scripts/tistory-blog.mjs",

@@ -27,7 +27,21 @@ node scripts/check-ready.mjs --fix
 # or: npm run setup
 ```
 
-The readiness script checks Node version, npm dependencies, `dist/` build output, build freshness, and optionally stored Tistory session state. It only runs install/build when `--fix` is explicitly passed.
+The readiness script checks Node version, npm dependencies, `dist/` build output, build freshness, and optionally stored Tistory session state. It only runs install/build when `--fix` is explicitly passed. `connect.mjs` checks dependencies/build before first login but does not require an existing stored session before opening the login window.
+
+## Windows/Codex runtime notes
+
+On Windows or Codex shells, prefer the included `.cmd` wrappers when PATH is unreliable:
+
+```bat
+scripts\check-ready.cmd --fix
+scripts\connect.cmd --blog https://<blog>.tistory.com/
+scripts\tistory-blog.cmd meta --blog https://<blog>.tistory.com/ --json
+```
+
+Set `TISTORY_BLOG_NODE=C:\path\to\node.exe` when the shell has a bundled Node but no npm, or when `node` resolves to a WindowsApps stub. Install/build still requires npm; if Codex provides Node without npm, use an official or portable Node.js distribution and put its `npm.cmd` on PATH before running setup.
+
+Credential Manager access can differ by Windows sandbox/elevation context. Run `connect`, `session check`, and later blog commands in the same context when possible; if a session is visible only in approved/elevated execution, keep using that context for session-backed commands.
 
 ## Cross-platform session storage
 
@@ -45,12 +59,14 @@ Preferred interactive flow:
 
 ```bash
 node scripts/connect.mjs
+# Windows: scripts\connect.cmd
 ```
 
 Or specify the blog URL directly:
 
 ```bash
 node scripts/connect.mjs --blog https://<blog>.tistory.com/
+# Windows: scripts\connect.cmd --blog https://<blog>.tistory.com/
 ```
 
 This opens a headed Chromium window. The user completes Kakao/Tistory login and 2FA directly in the browser. After login reaches the Tistory admin page, session cookies are stored in the OS credential store.

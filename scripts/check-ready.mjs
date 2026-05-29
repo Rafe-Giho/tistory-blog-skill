@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
-const root = path.resolve(new URL('..', import.meta.url).pathname);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const args = new Set(process.argv.slice(2));
 const fix = args.has('--fix');
@@ -18,8 +19,13 @@ const actions = [];
 function add(name, ok, detail, fixHint) {
   checks.push({ name, ok, detail, ...(fixHint ? { fixHint } : {}) });
 }
+function commandName(name) {
+  if (process.platform === 'win32' && name === 'npm') return 'npm.cmd';
+  return name;
+}
 function run(command, runArgs, opts = {}) {
-  const result = spawnSync(command, runArgs, {
+  const executable = command === 'node' ? process.execPath : commandName(command);
+  const result = spawnSync(executable, runArgs, {
     cwd: root,
     stdio: json ? 'pipe' : 'inherit',
     encoding: 'utf8',
@@ -27,7 +33,8 @@ function run(command, runArgs, opts = {}) {
   });
   if (result.status !== 0) {
     const stderr = result.stderr ? `\n${result.stderr}` : '';
-    throw new Error(`${command} ${runArgs.join(' ')} failed with code ${result.status}${stderr}`);
+    const detail = result.error?.message ? `\n${result.error.message}` : stderr;
+    throw new Error(`${command} ${runArgs.join(' ')} failed with code ${result.status ?? 'spawn-error'}${detail}`);
   }
   return result;
 }

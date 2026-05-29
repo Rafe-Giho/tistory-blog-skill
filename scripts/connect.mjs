@@ -3,8 +3,9 @@ import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(new URL('..', import.meta.url).pathname);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function parse(argv) {
   const out = { fix: false };
@@ -23,7 +24,7 @@ function normalizeBlog(value) {
   return raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`;
 }
 function run(args, { allowFail = false } = {}) {
-  const result = spawnSync('node', args, { cwd: root, stdio: 'inherit' });
+  const result = spawnSync(process.execPath, args, { cwd: root, stdio: 'inherit' });
   if (!allowFail && result.status !== 0) process.exit(result.status ?? 1);
   return result.status ?? 1;
 }
@@ -54,7 +55,9 @@ if (!blog) {
   process.exit(2);
 }
 
-const checkArgs = ['scripts/check-ready.mjs', '--blog', blog];
+// First-time connect should verify dependencies/build only. A stored session is expected
+// to be absent before the login window runs, especially on fresh Windows/Codex setups.
+const checkArgs = ['scripts/check-ready.mjs'];
 if (args.fix) checkArgs.push('--fix');
 const checkStatus = run(checkArgs, { allowFail: true });
 if (checkStatus !== 0 && !args.fix) {

@@ -17,7 +17,7 @@
 ## 요구 사항
 
 - Node.js 18 이상
-- npm
+- npm (설치/빌드 시 필요. 일부 Codex Windows 번들 Node에는 npm이 없을 수 있습니다.)
 - Chromium 실행이 가능한 데스크톱 환경
 - OS 자격증명 저장소
   - macOS: Keychain
@@ -25,6 +25,8 @@
   - Linux: Secret Service/libsecret 계열 환경
 
 처음 설치할 때는 npm 의존성이 필요합니다. 단, 사용할 때마다 `npm install`/`npm run build`를 반복하지 않습니다.
+
+Windows/Codex 환경에서 `node`는 있지만 `npm`이 없으면 Node.js 공식 설치본 또는 휴대용 Node.js를 준비하고, 그 Node/npm 경로를 `PATH` 앞에 두거나 `TISTORY_BLOG_NODE` 환경변수로 사용할 Node 실행 파일을 지정하세요.
 
 ## 설치
 
@@ -46,6 +48,19 @@ cd tistory-blog-skill
 node scripts/check-ready.mjs --fix
 ```
 
+PowerShell/Windows에서는 포함된 `.cmd` 래퍼를 사용할 수 있습니다.
+
+```powershell
+# 필요하면 사용할 Node를 명시
+$env:TISTORY_BLOG_NODE = "C:\path\to\node.exe"
+
+scripts\check-ready.cmd --fix
+scripts\connect.cmd --blog https://example.tistory.com/
+scripts\tistory-blog.cmd meta --blog https://example.tistory.com/ --json
+```
+
+`TISTORY_BLOG_NODE`가 없으면 래퍼는 `PATH`의 `node`를 사용합니다.
+
 `--fix`는 명시적으로 허용했을 때만 `npm install`과 `npm run build`를 수행합니다.
 
 ## 블로그 연결
@@ -54,6 +69,7 @@ node scripts/check-ready.mjs --fix
 
 ```bash
 node scripts/connect.mjs
+# Windows: scripts\connect.cmd
 ```
 
 블로그 주소를 바로 지정:
@@ -70,10 +86,11 @@ node scripts/connect.mjs --blog https://example.tistory.com/ --fix
 
 연결 과정:
 
-1. 연결할 티스토리 블로그 주소를 입력합니다.
-2. 브라우저 창이 열립니다.
-3. 사용자가 직접 카카오/티스토리 로그인과 2FA를 완료합니다.
-4. 로그인 성공 후 세션 쿠키가 OS 자격증명 저장소에 저장됩니다.
+1. 의존성/빌드 준비 상태를 확인합니다. 첫 로그인 전에는 저장 세션이 없어도 실패로 보지 않습니다.
+2. 연결할 티스토리 블로그 주소를 입력합니다.
+3. 브라우저 창이 열립니다.
+4. 사용자가 직접 카카오/티스토리 로그인과 2FA를 완료합니다.
+5. 로그인 성공 후 세션 쿠키가 OS 자격증명 저장소에 저장됩니다.
 
 비밀번호나 카카오 계정 정보는 저장하지 않습니다.
 
@@ -238,6 +255,14 @@ npm run build
 node scripts/check-ready.mjs --blog https://example.tistory.com/
 node scripts/tistory-blog.mjs skin validate --html templates/default/skin.html --css templates/default/style.css --json
 ```
+
+## Windows/Codex 참고
+
+- 경로 계산은 Windows 드라이브 경로를 안전하게 처리하도록 `fileURLToPath(import.meta.url)` 기반으로 되어 있습니다.
+- 내부 Node 재호출은 `node` 문자열 대신 현재 실행 중인 `process.execPath`를 사용합니다.
+- Codex Windows 환경은 Node만 있고 npm이 없을 수 있습니다. 이 경우 설치/빌드는 별도 Node/npm을 준비한 뒤 실행하세요.
+- `keytar`는 Windows Credential Manager에 세션을 저장합니다. Codex 샌드박스/권한 컨텍스트에 따라 일반 실행과 승인/elevated 실행에서 Credential Manager 접근 결과가 다를 수 있습니다. 세션 확인이 한쪽에서만 성공하면 같은 권한 컨텍스트로 로그인과 실행을 맞추세요.
+- `npm ci`/`npm install` 중 `keytar` lifecycle script가 `npm`을 다시 찾을 수 있으므로, Windows에서는 Node 디렉터리와 `node_modules\npm\bin`을 `PATH` 앞에 두는 것이 안전합니다.
 
 ## 주의 사항
 
