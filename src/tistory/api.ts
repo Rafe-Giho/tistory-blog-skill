@@ -418,7 +418,7 @@ export interface PostBody {
   totalWritingTimeMs: number;
 }
 
-/** 발행/수정 응답 — `entryUrl` 에서 postId 추출. */
+/** 발행/수정 응답. 신규 글 숫자 id는 응답 URL이 slug일 수 있어 목록에서 보강한다. */
 export interface PostResponse {
   /** post: `https://{host}/{id}`. page: `https://{host}/pages/{slogan}`. */
   entryUrl: string;
@@ -452,20 +452,38 @@ function defaultPostBody(): PostBody {
  *
  * ★ body 의 `id` 도 query `?id=` 도 무시됨. POST 는 항상 신규. 수정은 `updatePost`.
  *
- * @returns `{ entryUrl, postId }`. `postId` 는 post 일 때만 숫자, page 면 slogan.
+ * @returns `postId` only when a numeric admin id is known. Slug URLs are returned as `entrySlug`/`slogan`.
  */
 export async function publishPost(
   ctx: TistoryContext,
   fields: Partial<PostBody>,
-): Promise<{ entryUrl: string; postId: string }> {
+): Promise<{ entryUrl: string; postId?: string; entrySlug?: string; slogan?: string }> {
   const body: PostBody = { ...defaultPostBody(), ...fields, id: "0" };
   const { entryUrl } = await requestJson<PostResponse>(ctx, "/manage/post.json", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const postId = entryUrl.split("/").pop() ?? "";
-  return { entryUrl, postId };
+  const lastSegment = decodeURIComponent(entryUrl.split("/").filter(Boolean).pop() ?? "");
+  let postId = /^\d+$/.test(lastSegment) ? lastSegment : undefined;
+  let matched: PostListItem | undefined;
+  for (let i = 0; i < 5 && !matched; i++) {
+    const list = await listPosts(ctx, { page: 1, searchKeyword: body.title, searchType: "title", visibility: "all" }).catch(() => null);
+    matched = list?.items?.find((item) => {
+      const sameTitle = item.title === body.title;
+      const sameSlogan = lastSegment && item.slogan === lastSegment;
+      const sameUrl = item.permalink === entryUrl;
+      return sameUrl || (sameTitle && (sameSlogan || !lastSegment || !/^\d+$/.test(lastSegment)));
+    });
+    if (!matched) await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+  if (matched?.id && /^\d+$/.test(String(matched.id))) postId = String(matched.id);
+  const entrySlug = postId ? undefined : lastSegment || undefined;
+  return {
+    entryUrl,
+    ...(postId ? { postId } : {}),
+    ...(entrySlug ? { entrySlug, slogan: matched?.slogan || entrySlug } : {}),
+  };
 }
 
 /**

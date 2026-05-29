@@ -154,6 +154,17 @@ node scripts/tistory-blog.mjs post search \
   --json
 ```
 
+정확한 제목 일치만 필요하면 `--exact-title`을 추가합니다.
+
+```bash
+node scripts/tistory-blog.mjs post search \
+  --blog https://example.tistory.com/ \
+  --query "정확한 제목" \
+  --type title \
+  --exact-title \
+  --json
+```
+
 비공개 글 생성:
 
 ```bash
@@ -268,5 +279,7 @@ node scripts/tistory-blog.mjs skin validate --html templates/default/skin.html -
 
 - 티스토리 관리자 내부 API를 사용하므로 티스토리 UI/API 변경 시 수정이 필요할 수 있습니다.
 - 로그인 세션은 사용자별/환경별로 따로 연결해야 합니다.
+- 기본 JSON 출력은 `cookieHeader`, 비밀번호, 토큰류 필드를 마스킹합니다.
 - `node_modules/`와 로그인 쿠키는 Git에 포함하지 않습니다.
 - 공개 발행, 삭제, 스킨 변경은 신중하게 수행해야 합니다.
+- `post publish` 결과는 숫자 관리자 ID를 확인한 경우에만 `postId`를 반환합니다. URL이 slug 기반이면 `entrySlug`/`slogan`을 반환합니다.

@@ -33,7 +33,7 @@ Commands:
   meta --blog <host>
   categories get --blog <host>
   categories put --blog <host> --input body.json --yes
-  post search --blog <host> [--query text] [--type title|content|all] [--visibility all|public|private|protected] [--page 1]
+  post search --blog <host> [--query text] [--type title|content|all] [--exact-title] [--visibility all|public|private|protected] [--page 1]
   post fetch --blog <host> --url <post-url>
   post publish --blog <host> --title <title> --content-file file [--category id] [--tags a,b] [--visibility private|protected|public] [--published] [--type post|page] [--slogan slug] --yes [--yes-public]
   post update --blog <host> --post-id <id> --input fields.json --yes
@@ -65,10 +65,21 @@ function parse(argv) {
 }
 function readText(file) { return fs.readFileSync(file, 'utf8'); }
 function readJson(file) { return JSON.parse(readText(file)); }
+function redact(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(redact);
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (/cookieHeader|cookie|password|token|secret/i.test(key) && typeof val === 'string') out[key] = val ? '<redacted>' : val;
+    else out[key] = redact(val);
+  }
+  return out;
+}
 function writeOut(value, json) {
-  if (json) console.log(JSON.stringify(value, null, 2));
-  else if (typeof value === 'string') console.log(value);
-  else console.log(JSON.stringify(value, null, 2));
+  const safe = redact(value);
+  if (json) console.log(JSON.stringify(safe, null, 2));
+  else if (typeof safe === 'string') console.log(safe);
+  else console.log(JSON.stringify(safe, null, 2));
 }
 function requireArg(args, key) { if (!args[key]) throw new Error(`Missing --${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`); return args[key]; }
 async function ctx(args) {
@@ -113,7 +124,14 @@ try {
     else throw new Error(`Unknown categories action: ${action}`);
   } else if (group === 'post') {
     const c = await ctx(args);
-    if (action === 'search') out = await listPosts(c, { page: Number(args.page || 1), searchKeyword: args.query || '', searchType: args.type || 'title', visibility: args.visibility || 'all' });
+    if (action === 'search') {
+      out = await listPosts(c, { page: Number(args.page || 1), searchKeyword: args.query || '', searchType: args.type || 'title', visibility: args.visibility || 'all' });
+      if (args.exactTitle) {
+        const query = String(args.query || '').trim();
+        const items = (out.items || []).filter(item => String(item.title || '').trim() === query);
+        out = { ...out, count: items.length, items, exactTitle: query };
+      }
+    }
     else if (action === 'fetch') out = await fetchPost(requireArg(args, 'url'));
     else if (action === 'publish') { assertYes(args, 'yes', 'post publish/create'); if ((args.visibility || 'private') === 'public') assertYes(args, 'yesPublic', 'public publishing'); out = await publishPost(c, { type: 'post', visibility: visibilityToInt(args.visibility || 'private'), category: Number(args.category || 0), tag: tags(args.tags).join(','), published: args.published ? 1 : 0, ...postFields(args) }); }
     else if (action === 'update') { assertYes(args, 'yes', 'post update'); out = await updatePost(c, requireArg(args, 'postId'), readJson(requireArg(args, 'input'))); }

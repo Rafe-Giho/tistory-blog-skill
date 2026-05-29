@@ -119,6 +119,7 @@ node scripts/tistory-blog.mjs categories put --blog <blog> --input category-body
 
 ```bash
 node scripts/tistory-blog.mjs post search --blog <blog> --query "검색어" --type all --json
+node scripts/tistory-blog.mjs post search --blog <blog> --query "정확한 제목" --type title --exact-title --json
 node scripts/tistory-blog.mjs post fetch --blog <blog> --url https://<blog>/<id> --json
 
 # private draft/saved post
@@ -187,3 +188,5 @@ node scripts/tistory-blog.mjs screenshot --blog <blog> --url https://<blog>/mana
 - The helper uses core modules from `dist/tistory/*.js` directly.
 - For Codex or Claude Code, open this repository and run the same CLI commands.
 - For risky writes, always require explicit user confirmation in addition to CLI flags.
+- Default CLI output redacts cookie/password/token-like fields. Do not bypass this unless explicitly debugging locally.
+- `post publish` returns `postId` only when the numeric admin id is known; slug URLs are represented as `entrySlug`/`slogan`.

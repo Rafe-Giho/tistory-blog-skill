@@ -94,6 +94,11 @@ if (fix) {
     actions.push('npm run build');
     run('npm', ['run', 'build']);
   }
+  if (actions.length) {
+    const rerunArgs = process.argv.slice(1).filter((arg) => arg !== '--fix');
+    const rerun = spawnSync(process.execPath, rerunArgs, { cwd: root, stdio: 'inherit' });
+    process.exit(rerun.status ?? 1);
+  }
 }
 
 let session = null;
