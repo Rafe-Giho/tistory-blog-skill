@@ -14,6 +14,19 @@
 - 스킨 가져오기, 현재 스킨 조회, 검증, 프리뷰, 적용, 설정 변경
 - 로그인 세션을 포함한 스크린샷 캡처
 
+## 지원/검증 범위
+
+이 저장소는 **로컬 shell 명령을 실행할 수 있는 에이전트/CLI 환경**을 대상으로 합니다. “설치 가능”과 “티스토리 세션 로그인까지 가능”은 아래 조건에 따라 달라집니다.
+
+| 환경 | 상태 | 비고 |
+| --- | --- | --- |
+| macOS + OpenClaw | 로컬 검증됨 | Keychain 기반 세션 확인, 빌드/CLI 동작 확인 |
+| macOS + Codex/CLI 에이전트 | 지원 대상 | Node/npm, Keychain, headed Chromium 필요 |
+| Windows + Codex | 지원 대상, 사용자 실측 피드백 반영됨 | `.cmd` 래퍼와 `TISTORY_BLOG_NODE` 경로 우회 포함. 최신 릴리스는 Windows에서 재실측 전이면 `check-ready.cmd --fix`로 먼저 확인하세요. |
+| Windows + 일반 CLI/에이전트 | 지원 대상 | Node/npm, Credential Manager, headed Chromium 필요 |
+| Linux 데스크톱 + CLI/에이전트 | 지원 대상 | Secret Service/libsecret, headed Chromium 필요 |
+| Docker/CI/headless 서버 | 제한적 | 빌드/정적 검증은 가능하지만 브라우저 로그인과 OS credential store 때문에 세션 기반 작업은 보통 부적합 |
+
 ## 요구 사항
 
 - Node.js 18 이상
@@ -30,7 +43,7 @@ Windows/Codex 환경에서 `node`는 있지만 `npm`이 없으면 Node.js 공식
 
 ## 설치
 
-### Codex/macOS 또는 일반 CLI에서 설치
+### macOS/Linux Codex 또는 일반 CLI에서 설치
 
 ```bash
 git clone https://github.com/Rafe-Giho/tistory-blog-skill.git
@@ -39,6 +52,21 @@ node scripts/check-ready.mjs --fix
 ```
 
 Codex에서 작업 디렉터리가 이미 이 저장소라면 `git clone` 없이 저장소 루트에서 `node scripts/check-ready.mjs --fix`부터 실행하세요.
+
+### Windows Codex 또는 PowerShell에서 설치
+
+```powershell
+git clone https://github.com/Rafe-Giho/tistory-blog-skill.git
+cd tistory-blog-skill
+scripts\check-ready.cmd --fix
+```
+
+필요하면 사용할 Node를 명시합니다.
+
+```powershell
+$env:TISTORY_BLOG_NODE = "C:\path\to\node.exe"
+scripts\check-ready.cmd --fix
+```
 
 ### OpenClaw 스킬로 설치
 
@@ -50,18 +78,15 @@ cd tistory-blog
 node scripts/check-ready.mjs --fix
 ```
 
-PowerShell/Windows에서는 포함된 `.cmd` 래퍼를 사용할 수 있습니다.
+PowerShell/Windows에서는 포함된 `.cmd` 래퍼를 사용하는 편이 안전합니다.
 
 ```powershell
-# 필요하면 사용할 Node를 명시
-$env:TISTORY_BLOG_NODE = "C:\path\to\node.exe"
-
 scripts\check-ready.cmd --fix
 scripts\connect.cmd --blog https://example.tistory.com/
 scripts\tistory-blog.cmd meta --blog https://example.tistory.com/ --json
 ```
 
-`TISTORY_BLOG_NODE`가 없으면 래퍼는 `PATH`의 `node`를 사용합니다.
+`TISTORY_BLOG_NODE`가 없으면 래퍼는 Codex/Node.js 설치 후보를 먼저 찾고, 마지막으로 `PATH`의 `node`를 사용합니다.
 
 `--fix`는 명시적으로 허용했을 때만 `npm install`과 `npm run build`를 수행합니다. 새 클론에서는 이 단계가 사실상 필수입니다.
 
@@ -244,15 +269,25 @@ node scripts/check-ready.mjs --blog https://example.tistory.com/
 
 ### Codex / Claude Code
 
-저장소를 작업 폴더로 열고 CLI 명령을 실행하면 됩니다.
+저장소를 작업 폴더로 열고 CLI 명령을 실행하면 됩니다. 새 클론에서는 먼저 `check-ready --fix`를 실행해야 합니다.
+
+macOS/Linux:
 
 ```bash
+node scripts/check-ready.mjs --fix
 node scripts/tistory-blog.mjs post search --blog https://example.tistory.com/ --json
+```
+
+Windows PowerShell:
+
+```powershell
+scripts\check-ready.cmd --fix
+scripts\tistory-blog.cmd post search --blog https://example.tistory.com/ --json
 ```
 
 에이전트에게는 다음 원칙을 함께 지시하는 것을 권장합니다.
 
-> `scripts/tistory-blog.mjs`를 사용하고, 공개 발행·삭제·스킨 변경 전에는 반드시 사용자 확인을 받아라.
+> `scripts/tistory-blog.mjs` 또는 Windows의 `scripts\tistory-blog.cmd`를 사용하고, 공개 발행·삭제·스킨 변경 전에는 반드시 사용자 확인을 받아라.
 
 ## 개발
 

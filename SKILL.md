@@ -27,9 +27,20 @@ node scripts/check-ready.mjs --blog <blog.tistory.com>
 
 Normal use does **not** require `npm install` or `npm run build` every time. They are only needed when setting up a new environment, changing dependencies, or editing TypeScript source. The readiness script checks Node version, npm dependencies, `dist/` build output, build freshness, and optionally stored Tistory session state. It only runs install/build when `--fix` is explicitly passed. `connect.mjs` checks dependencies/build before first login but does not require an existing stored session before opening the login window.
 
+## Supported agent/runtime shape
+
+This skill is meant for local agents/CLIs that can run shell commands. It is not limited to OpenClaw.
+
+- macOS + OpenClaw: locally verified.
+- macOS + Codex/CLI agents: supported when Node/npm, Keychain, and headed Chromium are available.
+- Windows + Codex: supported based on prior user-verified feedback; use `.cmd` wrappers and rerun `scripts\check-ready.cmd --fix` after updates.
+- Windows + CLI agents: supported when Node/npm, Credential Manager, and headed Chromium are available.
+- Linux desktop agents: supported when Node/npm, Secret Service/libsecret, and headed Chromium are available.
+- Docker/CI/headless servers: build/static checks may work, but session-backed Tistory work is usually unsuitable because login needs a browser and OS credential store.
+
 ## Windows/Codex runtime notes
 
-On Windows or Codex shells, prefer the included `.cmd` wrappers when PATH is unreliable:
+On Windows or Codex shells, prefer the included `.cmd` wrappers:
 
 ```bat
 scripts\check-ready.cmd --fix
