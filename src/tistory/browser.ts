@@ -12,10 +12,13 @@
  *   - 블로그 host 별로 분리 → 멀티 블로그 동시 보관 가능
  */
 /// <reference types="node" />
+import { mkdir } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { chromium, type BrowserContext } from "playwright";
 import keytar from "keytar";
 
-import type { TistoryContext } from "./api.js";
+import { SessionExpiredError, type TistoryContext } from "./api.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OS credential storage keys
@@ -33,6 +36,11 @@ const DEFAULT_ACCOUNT = "default";
  * 매니페스트는 base account 슬롯에, 청크는 `${account}#${i}` 에.
  */
 const CHUNK_CHAR_LIMIT = 1000;
+const PROFILE_ROOT = path.join(
+  process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state"),
+  "tistory-blog",
+  "profiles",
+);
 interface ChunkManifest {
   v: 1;
   chunks: number;
@@ -172,6 +180,17 @@ function normalizeHost(blogUrl: string): string {
   return trimmed.replace(/\/.*$/, "");
 }
 
+
+function safeProfileName(host: string): string {
+  return host.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+async function profileDirForHost(host: string): Promise<string> {
+  const dir = path.join(PROFILE_ROOT, safeProfileName(host));
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // public API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,6 +206,8 @@ export interface LoginOptions {
    * 하므로 디폴트 5분.
    */
   timeoutMs?: number;
+  /** true면 저장된 persistent profile만 사용해 조용히 재인증을 시도한다. */
+  headless?: boolean;
 }
 
 export interface LoginResult {
@@ -215,11 +236,12 @@ export async function loginInteractive(opts: LoginOptions): Promise<LoginResult>
   const host = normalizeHost(opts.blogUrl);
   const timeoutMs = opts.timeoutMs ?? 5 * 60_000;
 
-  const browser = await chromium.launch({ headless: false });
   let context: BrowserContext | undefined;
   try {
-    context = await browser.newContext();
-    const page = await context.newPage();
+    context = await chromium.launchPersistentContext(await profileDirForHost(host), {
+      headless: opts.headless ?? false,
+    });
+    const page = context.pages()[0] ?? (await context.newPage());
     await page.goto(`https://${host}/manage`, { waitUntil: "domcontentloaded" });
 
     // 카카오/tistory 로그인 페이지를 거쳐 결국 `{host}/manage*` 로 돌아와야 함.
@@ -260,7 +282,26 @@ export async function loginInteractive(opts: LoginOptions): Promise<LoginResult>
     };
   } finally {
     await context?.close().catch(() => undefined);
-    await browser.close().catch(() => undefined);
+  }
+}
+
+/**
+ * 저장된 persistent browser profile 만으로 조용히 Tistory 관리자 세션을 갱신한다.
+ * Kakao 로그인/2FA 화면으로 막히면 timeout 후 SessionExpiredError 를 던진다.
+ */
+export async function refreshStoredSession(opts: LoginOptions): Promise<LoginResult> {
+  try {
+    return await loginInteractive({
+      ...opts,
+      headless: true,
+      timeoutMs: opts.timeoutMs ?? 20_000,
+    });
+  } catch (error) {
+    throw new SessionExpiredError(
+      `Automatic Tistory session refresh failed. Run session init for ${normalizeHost(opts.blogUrl)}. (${
+        error instanceof Error ? error.message : String(error)
+      })`,
+    );
   }
 }
 

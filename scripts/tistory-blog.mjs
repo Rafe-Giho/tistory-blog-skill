@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import {
+  SessionExpiredError,
   applySkin,
   applySkinSettings,
   buildImageSubstitution,
@@ -19,7 +20,7 @@ import {
   uploadImage,
   visibilityToInt,
 } from '../dist/tistory/api.js';
-import { clearStoredCookies, loadContext, loadStoredCookies, loginInteractive } from '../dist/tistory/browser.js';
+import { clearStoredCookies, loadContext, loadStoredCookies, loginInteractive, refreshStoredSession } from '../dist/tistory/browser.js';
 import { fetchPost } from '../dist/tistory/scraper.js';
 import { validateSkin } from '../dist/tistory/validator.js';
 
@@ -47,7 +48,9 @@ Commands:
   skin validate --html skin.html --css style.css
   screenshot --blog <host> --url <url> --out image.png
 
-Global: --json`);
+Global: --json [--auto-refresh]
+
+--auto-refresh: on session expiry, open the persistent browser profile to renew cookies before failing.`);
 }
 function parse(argv) {
   const a = { _: [], json: false };
@@ -85,8 +88,24 @@ function requireArg(args, key) { if (!args[key]) throw new Error(`Missing --${ke
 async function ctx(args) {
   const blog = requireArg(args, 'blog');
   const c = await loadContext(blog);
-  if (!c) throw new Error(`Tistory session not found or expired for ${blog}. Run: node scripts/tistory-blog.mjs session init --blog ${blog}`);
-  return c;
+  if (c) return c;
+  if (args.autoRefresh || process.env.TISTORY_AUTO_REFRESH === '1') {
+    await refreshStoredSession({ blogUrl: blog, ...(args.timeoutMs ? { timeoutMs: Number(args.timeoutMs) } : {}) });
+    const refreshed = await loadContext(blog);
+    if (refreshed) return refreshed;
+  }
+  throw new Error(`Tistory session not found or expired for ${blog}. Run: node scripts/tistory-blog.mjs session init --blog ${blog}`);
+}
+
+async function withAutoRefresh(args, operation) {
+  try {
+    return await operation(await ctx(args));
+  } catch (error) {
+    if (!(error instanceof SessionExpiredError) || !(args.autoRefresh || process.env.TISTORY_AUTO_REFRESH === '1')) throw error;
+    const blog = requireArg(args, 'blog');
+    await refreshStoredSession({ blogUrl: blog, ...(args.timeoutMs ? { timeoutMs: Number(args.timeoutMs) } : {}) });
+    return operation(await ctx(args));
+  }
 }
 function tags(value) { return value ? String(value).split(',').map(s => s.trim()).filter(Boolean) : []; }
 function postFields(args) {
@@ -112,20 +131,32 @@ if (!group || group === 'help' || args.help) { usage(); process.exit(group ? 0 :
 try {
   let out;
   if (group === 'session') {
-    if (action === 'init') out = await loginInteractive({ blogUrl: requireArg(args, 'blog'), ...(args.timeoutMs ? { timeoutMs: Number(args.timeoutMs) } : {}) });
-    else if (action === 'check') { const cookie = await loadStoredCookies(requireArg(args, 'blog')); out = { ok: !!cookie, blog: args.blog }; }
+    if (action === 'init' || action === 'refresh') out = await loginInteractive({ blogUrl: requireArg(args, 'blog'), ...(args.timeoutMs ? { timeoutMs: Number(args.timeoutMs) } : {}) });
+    else if (action === 'check') {
+      const blog = requireArg(args, 'blog');
+      const c = await loadContext(blog);
+      if (!c) out = { ok: false, blog, reason: 'no stored usable cookies' };
+      else {
+        try {
+          const meta = await fetchBlogConfig(c);
+          await listPosts(c, { page: 1, searchKeyword: '', searchType: 'title', visibility: 'all' });
+          out = { ok: true, blog, title: meta.title || null, domain: meta.domain || c.host, verified: ['config', 'posts'] };
+        } catch (error) {
+          out = { ok: false, blog, reason: error?.message || String(error), ...(error?.status ? { status: error.status } : {}) };
+        }
+      }
+    }
     else if (action === 'clear') { await clearStoredCookies(args.blog); out = { ok: true, cleared: args.blog || 'default' }; }
     else throw new Error(`Unknown session action: ${action}`);
   } else if (group === 'meta') {
-    out = await fetchBlogConfig(await ctx(args));
+    out = await withAutoRefresh(args, c => fetchBlogConfig(c));
   } else if (group === 'categories') {
-    if (action === 'get') out = await getCategories(await ctx(args));
-    else if (action === 'put') { assertYes(args, 'yes', 'category update'); out = await putCategories(await ctx(args), readJson(requireArg(args, 'input'))); }
+    if (action === 'get') out = await withAutoRefresh(args, c => getCategories(c));
+    else if (action === 'put') { assertYes(args, 'yes', 'category update'); out = await withAutoRefresh(args, c => putCategories(c, readJson(requireArg(args, 'input')))); }
     else throw new Error(`Unknown categories action: ${action}`);
   } else if (group === 'post') {
-    const c = await ctx(args);
     if (action === 'search') {
-      out = await listPosts(c, { page: Number(args.page || 1), searchKeyword: args.query || '', searchType: args.type || 'title', visibility: args.visibility || 'all' });
+      out = await withAutoRefresh(args, c => listPosts(c, { page: Number(args.page || 1), searchKeyword: args.query || '', searchType: args.type || 'title', visibility: args.visibility || 'all' }));
       if (args.exactTitle) {
         const query = String(args.query || '').trim();
         const items = (out.items || []).filter(item => String(item.title || '').trim() === query);
@@ -133,9 +164,9 @@ try {
       }
     }
     else if (action === 'fetch') out = await fetchPost(requireArg(args, 'url'));
-    else if (action === 'publish') { assertYes(args, 'yes', 'post publish/create'); if ((args.visibility || 'private') === 'public') assertYes(args, 'yesPublic', 'public publishing'); out = await publishPost(c, { type: 'post', visibility: visibilityToInt(args.visibility || 'private'), category: Number(args.category || 0), tag: tags(args.tags).join(','), published: args.published ? 1 : 0, ...postFields(args) }); }
-    else if (action === 'update') { assertYes(args, 'yes', 'post update'); out = await updatePost(c, requireArg(args, 'postId'), readJson(requireArg(args, 'input'))); }
-    else if (action === 'delete') { assertYes(args, 'yesDelete', 'post deletion'); out = await deletePost(c, requireArg(args, 'postId')); }
+    else if (action === 'publish') { assertYes(args, 'yes', 'post publish/create'); if ((args.visibility || 'private') === 'public') assertYes(args, 'yesPublic', 'public publishing'); out = await withAutoRefresh(args, c => publishPost(c, { type: 'post', visibility: visibilityToInt(args.visibility || 'private'), category: Number(args.category || 0), tag: tags(args.tags).join(','), published: args.published ? 1 : 0, ...postFields(args) })); }
+    else if (action === 'update') { assertYes(args, 'yes', 'post update'); out = await withAutoRefresh(args, c => updatePost(c, requireArg(args, 'postId'), readJson(requireArg(args, 'input')))); }
+    else if (action === 'delete') { assertYes(args, 'yesDelete', 'post deletion'); out = await withAutoRefresh(args, c => deletePost(c, requireArg(args, 'postId'))); }
     else throw new Error(`Unknown post action: ${action}`);
   } else if (group === 'image') {
     if (action !== 'upload') throw new Error(`Unknown image action: ${action}`);
