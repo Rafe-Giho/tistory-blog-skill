@@ -41,6 +41,29 @@ const PROFILE_ROOT = path.join(
   "tistory-blog",
   "profiles",
 );
+
+export class CredentialStoreError extends Error {
+  readonly code = "credential_store_unavailable";
+  readonly operation: string;
+  readonly account?: string;
+
+  constructor(operation: string, account: string | undefined, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`Credential Store access failed during ${operation}${account ? ` for ${account}` : ""}: ${detail}`);
+    this.name = "CredentialStoreError";
+    this.operation = operation;
+    this.account = account;
+    if (cause instanceof Error) this.cause = cause;
+  }
+}
+
+async function credentialStore<T>(operation: string, account: string | undefined, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    throw new CredentialStoreError(operation, account, error);
+  }
+}
 interface ChunkManifest {
   v: 1;
   chunks: number;
@@ -53,14 +76,15 @@ async function setChunked(account: string, value: string): Promise<void> {
     parts.push(value.slice(i, i + CHUNK_CHAR_LIMIT));
   }
   const manifest: ChunkManifest = { v: 1, chunks: parts.length };
-  await keytar.setPassword(CREDENTIAL_SERVICE, account, JSON.stringify(manifest));
+  await credentialStore("setPassword", account, () => keytar.setPassword(CREDENTIAL_SERVICE, account, JSON.stringify(manifest)));
   for (let i = 0; i < parts.length; i++) {
-    await keytar.setPassword(CREDENTIAL_SERVICE, `${account}#${i}`, parts[i]!);
+    const chunkAccount = `${account}#${i}`;
+    await credentialStore("setPassword", chunkAccount, () => keytar.setPassword(CREDENTIAL_SERVICE, chunkAccount, parts[i]!));
   }
 }
 
 async function getChunked(account: string): Promise<string | null> {
-  const head = await keytar.getPassword(CREDENTIAL_SERVICE, account);
+  const head = await credentialStore("getPassword", account, () => keytar.getPassword(CREDENTIAL_SERVICE, account));
   if (!head) return null;
   const manifest = parseManifest(head);
   if (!manifest) {
@@ -69,7 +93,8 @@ async function getChunked(account: string): Promise<string | null> {
   }
   const parts: string[] = [];
   for (let i = 0; i < manifest.chunks; i++) {
-    const part = await keytar.getPassword(CREDENTIAL_SERVICE, `${account}#${i}`);
+    const chunkAccount = `${account}#${i}`;
+    const part = await credentialStore("getPassword", chunkAccount, () => keytar.getPassword(CREDENTIAL_SERVICE, chunkAccount));
     if (part == null) return null; // 청크 손실 → 손상으로 간주
     parts.push(part);
   }
@@ -77,16 +102,17 @@ async function getChunked(account: string): Promise<string | null> {
 }
 
 async function clearChunked(account: string): Promise<void> {
-  const head = await keytar.getPassword(CREDENTIAL_SERVICE, account).catch(() => null);
+  const head = await credentialStore("getPassword", account, () => keytar.getPassword(CREDENTIAL_SERVICE, account));
   if (head) {
     const manifest = parseManifest(head);
     if (manifest) {
       for (let i = 0; i < manifest.chunks; i++) {
-        await keytar.deletePassword(CREDENTIAL_SERVICE, `${account}#${i}`).catch(() => undefined);
+        const chunkAccount = `${account}#${i}`;
+        await credentialStore("deletePassword", chunkAccount, () => keytar.deletePassword(CREDENTIAL_SERVICE, chunkAccount));
       }
     }
   }
-  await keytar.deletePassword(CREDENTIAL_SERVICE, account).catch(() => undefined);
+  await credentialStore("deletePassword", account, () => keytar.deletePassword(CREDENTIAL_SERVICE, account));
 }
 
 function parseManifest(raw: string): ChunkManifest | null {
@@ -340,7 +366,7 @@ export async function clearStoredCookies(blogUrl?: string): Promise<void> {
   // default 만 지울 땐 host 별 항목도 같이 비워야 stale 안 남음. base account 별로 묶어
   // 청크까지 같이 지운다 (`host#N` 형태는 base 슬롯의 매니페스트 따라 정리됨).
   const bases = new Set<string>();
-  const all = await keytar.findCredentials(CREDENTIAL_SERVICE).catch(() => []);
+  const all = await credentialStore("findCredentials", undefined, () => keytar.findCredentials(CREDENTIAL_SERVICE));
   for (const cred of all) {
     bases.add(cred.account.replace(/#\d+$/, ""));
   }

@@ -24,19 +24,26 @@ function commandName(name) {
   return name;
 }
 function run(command, runArgs, opts = {}) {
+  const { allowFailure = false, ...spawnOpts } = opts;
   const executable = command === 'node' ? process.execPath : commandName(command);
   const result = spawnSync(executable, runArgs, {
     cwd: root,
     stdio: json ? 'pipe' : 'inherit',
     encoding: 'utf8',
-    ...opts,
+    ...spawnOpts,
   });
-  if (result.status !== 0) {
+  if (!allowFailure && result.status !== 0) {
     const stderr = result.stderr ? `\n${result.stderr}` : '';
     const detail = result.error?.message ? `\n${result.error.message}` : stderr;
     throw new Error(`${command} ${runArgs.join(' ')} failed with code ${result.status ?? 'spawn-error'}${detail}`);
   }
   return result;
+}
+function parseJsonOutput(result) {
+  const text = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+  if (!text) return null;
+  try { return JSON.parse(text); }
+  catch { return { ok: false, error: text }; }
 }
 function exists(rel) {
   return fs.existsSync(path.join(root, rel));
@@ -104,10 +111,13 @@ if (fix) {
 let session = null;
 if (blog) {
   if (exists('dist/tistory/browser.js') && canResolve('keytar')) {
-    const result = run('node', ['scripts/tistory-blog.mjs', 'session', 'check', '--blog', blog, '--json'], { stdio: 'pipe' });
-    try { session = JSON.parse(result.stdout); }
-    catch { session = { ok: false, error: result.stdout || result.stderr || 'unparseable session check output' }; }
-    add(`session:${blog}`, !!session.ok, session.ok ? 'stored session found' : 'no stored session', `Run node scripts/tistory-blog.mjs session init --blog ${blog} --json`);
+    const result = run('node', ['scripts/tistory-blog.mjs', 'session', 'check', '--blog', blog, '--json'], { stdio: 'pipe', allowFailure: true });
+    session = parseJsonOutput(result) || { ok: false, error: 'empty session check output' };
+    const detail = session.ok ? 'stored session found' : (session.code === 'credential_store_unavailable' ? `credential store access failed: ${session.reason || session.error}` : (session.reason || session.error || 'no stored session'));
+    const fixHint = session.code === 'credential_store_unavailable'
+      ? 'Allow OS credential-store access, unlock Keychain/Credential Manager, or run in the same user/session context.'
+      : `Run node scripts/tistory-blog.mjs session init --blog ${blog} --json`;
+    add(`session:${blog}`, !!session.ok, detail, fixHint);
   } else {
     add(`session:${blog}`, false, 'skipped because dependencies/build are not ready');
   }

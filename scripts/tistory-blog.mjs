@@ -20,7 +20,7 @@ import {
   uploadImage,
   visibilityToInt,
 } from '../dist/tistory/api.js';
-import { clearStoredCookies, loadContext, loadStoredCookies, loginInteractive, refreshStoredSession } from '../dist/tistory/browser.js';
+import { CredentialStoreError, clearStoredCookies, loadContext, loadStoredCookies, loginInteractive, refreshStoredSession } from '../dist/tistory/browser.js';
 import { fetchPost } from '../dist/tistory/scraper.js';
 import { validateSkin } from '../dist/tistory/validator.js';
 
@@ -127,23 +127,28 @@ function assertYes(args, flag = 'yes', what = 'write operation') {
 
 const args = parse(process.argv);
 const [group, action] = args._;
-if (!group || group === 'help' || args.help) { usage(); process.exit(group ? 0 : 2); }
+if (!group || group === 'help' || args.help) { usage(); process.exit((group || args.help) ? 0 : 2); }
 try {
   let out;
   if (group === 'session') {
     if (action === 'init' || action === 'refresh') out = await loginInteractive({ blogUrl: requireArg(args, 'blog'), ...(args.timeoutMs ? { timeoutMs: Number(args.timeoutMs) } : {}) });
     else if (action === 'check') {
       const blog = requireArg(args, 'blog');
-      const c = await loadContext(blog);
-      if (!c) out = { ok: false, blog, reason: 'no stored usable cookies' };
-      else {
-        try {
-          const meta = await fetchBlogConfig(c);
-          await listPosts(c, { page: 1, searchKeyword: '', searchType: 'title', visibility: 'all' });
-          out = { ok: true, blog, title: meta.title || null, domain: meta.domain || c.host, verified: ['config', 'posts'] };
-        } catch (error) {
-          out = { ok: false, blog, reason: error?.message || String(error), ...(error?.status ? { status: error.status } : {}) };
+      try {
+        const c = await loadContext(blog);
+        if (!c) out = { ok: false, blog, code: 'session_not_found', reason: 'no stored usable cookies' };
+        else {
+          try {
+            const meta = await fetchBlogConfig(c);
+            await listPosts(c, { page: 1, searchKeyword: '', searchType: 'title', visibility: 'all' });
+            out = { ok: true, blog, title: meta.title || null, domain: meta.domain || c.host, verified: ['config', 'posts'] };
+          } catch (error) {
+            out = { ok: false, blog, code: error?.name === 'SessionExpiredError' ? 'session_expired' : 'session_check_failed', reason: error?.message || String(error), ...(error?.status ? { status: error.status } : {}) };
+          }
         }
+      } catch (error) {
+        if (error instanceof CredentialStoreError) out = { ok: false, blog, code: error.code, reason: error.message, operation: error.operation, ...(error.account ? { account: error.account } : {}) };
+        else throw error;
       }
     }
     else if (action === 'clear') { await clearStoredCookies(args.blog); out = { ok: true, cleared: args.blog || 'default' }; }
@@ -197,6 +202,16 @@ try {
   writeOut(out, args.json);
 } catch (error) {
   const body = error?.body ? String(error.body).slice(0, 1000) : undefined;
-  console.error(JSON.stringify({ ok: false, error: error?.message || String(error), ...(error?.status ? { status: error.status } : {}), ...(body ? { body } : {}) }, null, 2));
+  const payload = {
+    ok: false,
+    code: error instanceof CredentialStoreError ? error.code : (error?.name === 'SessionExpiredError' ? 'session_expired' : 'error'),
+    error: error?.message || String(error),
+    ...(error instanceof CredentialStoreError ? { operation: error.operation, ...(error.account ? { account: error.account } : {}) } : {}),
+    ...(error?.status ? { status: error.status } : {}),
+    ...(body ? { body } : {}),
+  };
+  const text = JSON.stringify(payload, null, 2);
+  if (args.json) console.log(text);
+  else console.error(text);
   process.exit(1);
 }

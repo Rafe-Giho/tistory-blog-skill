@@ -5,29 +5,27 @@ description: Native OpenClaw skill for Tistory blog operations after the officia
 
 # Tistory Blog
 
-Use this skill for Tistory blog management from OpenClaw through `scripts/tistory-blog.mjs`.
+Use this skill for Tistory blog management from Codex, OpenClaw, or other local-agent shells through `scripts/tistory-blog.mjs`.
 
 This is a Node/TypeScript-backed CLI skill. It is not a long-running server: each command starts a short-lived Node process and exits.
 
 ## Setup and readiness
 
-Normal use does **not** require `npm install` or `npm run build` every time. They are only needed when setting up a new environment, changing dependencies, or editing TypeScript source.
-
-Check local readiness first:
+A fresh GitHub clone is **not runnable yet**: `node_modules/` and `dist/` are intentionally absent until setup. In Codex/macOS, clone or open the repository, then run the setup check from that repository root before any blog command:
 
 ```bash
-cd ~/.openclaw/skills/tistory-blog
-node scripts/check-ready.mjs --blog <blog.tistory.com>
-```
-
-If the check reports missing dependencies or stale build output, repair explicitly:
-
-```bash
+cd /path/to/tistory-blog-skill
 node scripts/check-ready.mjs --fix
 # or: npm run setup
 ```
 
-The readiness script checks Node version, npm dependencies, `dist/` build output, build freshness, and optionally stored Tistory session state. It only runs install/build when `--fix` is explicitly passed. `connect.mjs` checks dependencies/build before first login but does not require an existing stored session before opening the login window.
+After setup, check local readiness and session state:
+
+```bash
+node scripts/check-ready.mjs --blog <blog.tistory.com>
+```
+
+Normal use does **not** require `npm install` or `npm run build` every time. They are only needed when setting up a new environment, changing dependencies, or editing TypeScript source. The readiness script checks Node version, npm dependencies, `dist/` build output, build freshness, and optionally stored Tistory session state. It only runs install/build when `--fix` is explicitly passed. `connect.mjs` checks dependencies/build before first login but does not require an existing stored session before opening the login window.
 
 ## Windows/Codex runtime notes
 

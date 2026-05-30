@@ -24,11 +24,21 @@
   - Windows: Credential Manager
   - Linux: Secret Service/libsecret 계열 환경
 
-처음 설치할 때는 npm 의존성이 필요합니다. 단, 사용할 때마다 `npm install`/`npm run build`를 반복하지 않습니다.
+GitHub에서 막 복사/클론한 직후에는 `node_modules/`와 `dist/`가 없어서 CLI를 바로 실행할 수 없습니다. 첫 사용 전 반드시 `node scripts/check-ready.mjs --fix`(또는 `npm run setup`)로 의존성 설치와 빌드를 끝내야 합니다. 단, 사용할 때마다 `npm install`/`npm run build`를 반복하지 않습니다.
 
 Windows/Codex 환경에서 `node`는 있지만 `npm`이 없으면 Node.js 공식 설치본 또는 휴대용 Node.js를 준비하고, 그 Node/npm 경로를 `PATH` 앞에 두거나 `TISTORY_BLOG_NODE` 환경변수로 사용할 Node 실행 파일을 지정하세요.
 
 ## 설치
+
+### Codex/macOS 또는 일반 CLI에서 설치
+
+```bash
+git clone https://github.com/Rafe-Giho/tistory-blog-skill.git
+cd tistory-blog-skill
+node scripts/check-ready.mjs --fix
+```
+
+Codex에서 작업 디렉터리가 이미 이 저장소라면 `git clone` 없이 저장소 루트에서 `node scripts/check-ready.mjs --fix`부터 실행하세요.
 
 ### OpenClaw 스킬로 설치
 
@@ -37,14 +47,6 @@ mkdir -p ~/.openclaw/skills
 cd ~/.openclaw/skills
 git clone https://github.com/Rafe-Giho/tistory-blog-skill.git tistory-blog
 cd tistory-blog
-node scripts/check-ready.mjs --fix
-```
-
-### 일반 CLI/Codex/Claude Code에서 사용
-
-```bash
-git clone https://github.com/Rafe-Giho/tistory-blog-skill.git
-cd tistory-blog-skill
 node scripts/check-ready.mjs --fix
 ```
 
@@ -61,7 +63,7 @@ scripts\tistory-blog.cmd meta --blog https://example.tistory.com/ --json
 
 `TISTORY_BLOG_NODE`가 없으면 래퍼는 `PATH`의 `node`를 사용합니다.
 
-`--fix`는 명시적으로 허용했을 때만 `npm install`과 `npm run build`를 수행합니다.
+`--fix`는 명시적으로 허용했을 때만 `npm install`과 `npm run build`를 수행합니다. 새 클론에서는 이 단계가 사실상 필수입니다.
 
 ## 블로그 연결
 
@@ -115,7 +117,7 @@ node scripts/check-ready.mjs --blog https://example.tistory.com/
 - `src/` 대비 `dist/` 최신 여부
 - 선택한 블로그의 저장 세션 여부
 
-문제가 있을 때만 명시적으로 복구합니다.
+새 클론이거나 문제가 있을 때만 명시적으로 복구합니다. 새 클론에서는 이 단계 없이는 `scripts/tistory-blog.mjs`가 `dist/` 모듈을 찾지 못해 실패합니다.
 
 ```bash
 node scripts/check-ready.mjs --fix
